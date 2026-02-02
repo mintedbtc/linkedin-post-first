@@ -1,202 +1,129 @@
 // LinkedIn Post First - Content Script
-// Blocks feed until user has posted today
-
 (function() {
   'use strict';
 
   const OVERLAY_ID = 'lpf-overlay';
   const STORAGE_KEY = 'lpf_last_post_date';
   
-  console.log('[LinkedIn Post First] Extension loaded on:', window.location.pathname);
-  
-  // Pages that are allowed without posting (be specific)
-  const ALLOWED_PATHS = [
-    '/post/new',
-    '/messaging',
-    '/jobs',
-    '/notifications',
-  ];
-  
-  // Paths that start with these are allowed
-  const ALLOWED_PREFIXES = [
-    '/in/', // Profile pages
-    '/mynetwork/',
-  ];
-
-  // Check if current page should be allowed
-  function isAllowedPage() {
-    const path = window.location.pathname;
-    
-    // Check exact matches
-    if (ALLOWED_PATHS.includes(path)) return true;
-    
-    // Check prefix matches
-    if (ALLOWED_PREFIXES.some(prefix => path.startsWith(prefix))) return true;
-    
-    return false;
-  }
+  // Immediately log to confirm script is running
+  console.log('[LinkedIn Post First] 🚀 Script loaded!');
 
   // Check if user has posted today
-  async function hasPostedToday() {
+  function hasPostedToday() {
     return new Promise((resolve) => {
       chrome.storage.local.get([STORAGE_KEY], (result) => {
         const lastPostDate = result[STORAGE_KEY];
         const today = new Date().toDateString();
+        console.log('[LinkedIn Post First] Last post:', lastPostDate, 'Today:', today);
         resolve(lastPostDate === today);
       });
     });
   }
 
-  // Mark that user has posted today
+  // Mark posted
   function markPostedToday() {
     const today = new Date().toDateString();
     chrome.storage.local.set({ [STORAGE_KEY]: today });
+    console.log('[LinkedIn Post First] Marked as posted');
   }
 
-  // Create the blocking overlay
+  // Create overlay
   function createOverlay() {
     if (document.getElementById(OVERLAY_ID)) return;
     
-    // Wait for body to exist
-    if (!document.body) {
-      console.log('[LinkedIn Post First] Waiting for body...');
-      setTimeout(createOverlay, 50);
-      return;
-    }
-    
-    console.log('[LinkedIn Post First] Creating overlay');
+    console.log('[LinkedIn Post First] Creating overlay NOW');
 
     const overlay = document.createElement('div');
     overlay.id = OVERLAY_ID;
+    overlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.95);
+      z-index: 999999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    `;
     overlay.innerHTML = `
-      <div class="lpf-content">
-        <div class="lpf-icon">✍️</div>
-        <h1>Post First, Scroll Later</h1>
-        <p>You haven't posted on LinkedIn today yet.</p>
-        <p class="lpf-subtitle">Create before you consume.</p>
-        <div class="lpf-buttons">
-          <a href="https://www.linkedin.com/post/new" class="lpf-btn lpf-btn-primary">
-            Create a Post
-          </a>
-          <button class="lpf-btn lpf-btn-secondary" id="lpf-posted-btn">
-            I Already Posted
+      <div style="text-align:center;color:white;padding:40px;">
+        <div style="font-size:64px;margin-bottom:20px;">✍️</div>
+        <h1 style="font-size:28px;margin-bottom:16px;">Post First, Scroll Later</h1>
+        <p style="font-size:18px;color:#aaa;margin-bottom:32px;">Create before you consume.</p>
+        <a href="https://www.linkedin.com/post/new" 
+           style="display:inline-block;background:#0a66c2;color:white;padding:14px 28px;border-radius:24px;text-decoration:none;font-weight:600;margin-right:12px;">
+          Create a Post
+        </a>
+        <button id="lpf-posted-btn"
+           style="background:transparent;color:white;padding:14px 28px;border-radius:24px;border:2px solid #444;font-weight:600;cursor:pointer;">
+          I Already Posted
+        </button>
+        <div style="margin-top:40px;">
+          <button id="lpf-bypass-btn" style="background:none;border:none;color:#666;cursor:pointer;font-size:14px;">
+            Skip for 5 minutes
           </button>
-        </div>
-        <div class="lpf-footer">
-          <button id="lpf-bypass-btn" class="lpf-bypass">Skip for 5 minutes</button>
         </div>
       </div>
     `;
     
     document.body.appendChild(overlay);
+    console.log('[LinkedIn Post First] Overlay added to page!');
 
-    // Handle "I Already Posted" button
-    document.getElementById('lpf-posted-btn').addEventListener('click', () => {
+    document.getElementById('lpf-posted-btn').onclick = () => {
       markPostedToday();
-      removeOverlay();
-    });
-
-    // Handle bypass button
-    document.getElementById('lpf-bypass-btn').addEventListener('click', () => {
-      removeOverlay();
-      // Re-enable after 5 minutes
-      setTimeout(checkAndBlock, 5 * 60 * 1000);
-    });
-  }
-
-  // Remove the overlay
-  function removeOverlay() {
-    const overlay = document.getElementById(OVERLAY_ID);
-    if (overlay) {
       overlay.remove();
-    }
+    };
+
+    document.getElementById('lpf-bypass-btn').onclick = () => {
+      overlay.remove();
+      setTimeout(init, 5 * 60 * 1000);
+    };
   }
 
-  // Detect if user is creating/has created a post
-  function detectPosting() {
-    // Check for post creation success indicators
-    const observer = new MutationObserver((mutations) => {
-      // Look for the post composer or success message
-      const postCreated = document.querySelector('[data-test-id="post-success"]') ||
-                         document.querySelector('.share-box-feed-entry__closed-share-box') ||
-                         document.querySelector('.feed-shared-update-v2__description');
-      
-      // Also detect if user is on the new post page and has content
-      const postComposer = document.querySelector('.share-creation-state__text-editor');
-      const postButton = document.querySelector('[data-control-name="share.post"]');
-      
-      // If we detect successful posting behavior, mark as posted
-      if (postCreated && window.location.pathname.includes('/feed')) {
-        // User likely just posted
-        markPostedToday();
-        removeOverlay();
-      }
-    });
-
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
-  }
-
-  // Check URL for post completion
-  function checkForPostCompletion() {
-    // If redirected back from post creation, might have posted
-    if (document.referrer.includes('/post/new')) {
-      // Could have posted - but we'll rely on manual confirmation or detection
-    }
-  }
-
-  // Main check and block function
-  async function checkAndBlock() {
-    console.log('[LinkedIn Post First] Checking page:', window.location.pathname);
+  // Main init
+  async function init() {
+    const path = window.location.pathname;
+    console.log('[LinkedIn Post First] Checking path:', path);
     
-    // Skip on allowed pages
-    if (isAllowedPage()) {
-      console.log('[LinkedIn Post First] Allowed page, not blocking');
-      removeOverlay();
+    // Allow these pages
+    if (path.startsWith('/post/') || path.startsWith('/in/') || 
+        path.startsWith('/messaging') || path.startsWith('/jobs') ||
+        path.startsWith('/mynetwork')) {
+      console.log('[LinkedIn Post First] Allowed page');
       return;
     }
 
-    // Check if already posted today
     const posted = await hasPostedToday();
-    console.log('[LinkedIn Post First] Posted today:', posted);
     if (posted) {
-      removeOverlay();
+      console.log('[LinkedIn Post First] Already posted today');
       return;
     }
 
-    // Block the feed
-    console.log('[LinkedIn Post First] Blocking feed!');
+    console.log('[LinkedIn Post First] BLOCKING!');
     createOverlay();
   }
 
-  // Listen for storage changes (if user marks posted in another tab)
-  chrome.storage.onChanged.addListener((changes, namespace) => {
-    if (namespace === 'local' && changes[STORAGE_KEY]) {
-      checkAndBlock();
+  // Run when body exists
+  function waitForBody() {
+    if (document.body) {
+      init();
+    } else {
+      setTimeout(waitForBody, 10);
     }
-  });
-
-  // Initial check when DOM is ready
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-      checkAndBlock();
-      detectPosting();
-    });
-  } else {
-    checkAndBlock();
-    detectPosting();
   }
 
-  // Re-check on navigation (LinkedIn is a SPA)
+  waitForBody();
+
+  // Re-run on SPA navigation
   let lastUrl = location.href;
-  new MutationObserver(() => {
-    const url = location.href;
-    if (url !== lastUrl) {
-      lastUrl = url;
-      setTimeout(checkAndBlock, 100);
+  setInterval(() => {
+    if (location.href !== lastUrl) {
+      lastUrl = location.href;
+      waitForBody();
     }
-  }).observe(document, { subtree: true, childList: true });
+  }, 500);
 
 })();
