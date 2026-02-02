@@ -4,8 +4,7 @@
   "version": "1.0.0",
   "description": "Block LinkedIn feed scrolling until you've posted today",
   "permissions": [
-    "storage",
-    "alarms"
+    "storage"
   ],
   "host_permissions": [
     "https://www.linkedin.com/*",
