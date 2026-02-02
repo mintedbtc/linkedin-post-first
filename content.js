@@ -7,21 +7,33 @@
   const OVERLAY_ID = 'lpf-overlay';
   const STORAGE_KEY = 'lpf_last_post_date';
   
-  // Pages that are allowed without posting
+  console.log('[LinkedIn Post First] Extension loaded on:', window.location.pathname);
+  
+  // Pages that are allowed without posting (be specific)
   const ALLOWED_PATHS = [
-    '/in/', // Profile pages (for posting)
-    '/post/new', // New post page
-    '/feed/update', // When creating a post
-    '/messaging', // Messages
-    '/jobs', // Job search
-    '/mynetwork/invite-connect', // Connection requests
-    '/notifications', // Notifications
+    '/post/new',
+    '/messaging',
+    '/jobs',
+    '/notifications',
+  ];
+  
+  // Paths that start with these are allowed
+  const ALLOWED_PREFIXES = [
+    '/in/', // Profile pages
+    '/mynetwork/',
   ];
 
   // Check if current page should be allowed
   function isAllowedPage() {
     const path = window.location.pathname;
-    return ALLOWED_PATHS.some(allowed => path.startsWith(allowed));
+    
+    // Check exact matches
+    if (ALLOWED_PATHS.includes(path)) return true;
+    
+    // Check prefix matches
+    if (ALLOWED_PREFIXES.some(prefix => path.startsWith(prefix))) return true;
+    
+    return false;
   }
 
   // Check if user has posted today
@@ -44,6 +56,15 @@
   // Create the blocking overlay
   function createOverlay() {
     if (document.getElementById(OVERLAY_ID)) return;
+    
+    // Wait for body to exist
+    if (!document.body) {
+      console.log('[LinkedIn Post First] Waiting for body...');
+      setTimeout(createOverlay, 50);
+      return;
+    }
+    
+    console.log('[LinkedIn Post First] Creating overlay');
 
     const overlay = document.createElement('div');
     overlay.id = OVERLAY_ID;
@@ -67,7 +88,7 @@
       </div>
     `;
     
-    document.documentElement.appendChild(overlay);
+    document.body.appendChild(overlay);
 
     // Handle "I Already Posted" button
     document.getElementById('lpf-posted-btn').addEventListener('click', () => {
@@ -128,20 +149,25 @@
 
   // Main check and block function
   async function checkAndBlock() {
+    console.log('[LinkedIn Post First] Checking page:', window.location.pathname);
+    
     // Skip on allowed pages
     if (isAllowedPage()) {
+      console.log('[LinkedIn Post First] Allowed page, not blocking');
       removeOverlay();
       return;
     }
 
     // Check if already posted today
     const posted = await hasPostedToday();
+    console.log('[LinkedIn Post First] Posted today:', posted);
     if (posted) {
       removeOverlay();
       return;
     }
 
     // Block the feed
+    console.log('[LinkedIn Post First] Blocking feed!');
     createOverlay();
   }
 
