@@ -5,7 +5,7 @@
   "description": "Block LinkedIn feed scrolling until you've posted today",
   "permissions": [
     "storage",
-    "activeTab"
+    "alarms"
   ],
   "host_permissions": [
     "https://www.linkedin.com/*",
@@ -29,7 +29,7 @@
       "matches": ["https://www.linkedin.com/*", "https://linkedin.com/*"],
       "js": ["content.js"],
       "css": ["content.css"],
-      "run_at": "document_start"
+      "run_at": "document_idle"
     }
   ],
   "background": {
